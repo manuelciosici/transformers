@@ -348,16 +348,16 @@ class AdamW(Optimizer):
                 # In-place operations to update the averages at the same time
                 exp_avg.mul_(beta1).add_(grad, alpha=(1.0 - beta1))
                 exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1.0 - beta2)
-                denom = exp_avg_sq.sqrt().add_(group["eps"])
 
                 step_size = group["lr"]
                 if group["correct_bias"]:  # No bias correction for Bert
                     bias_correction1 = 1.0 - beta1 ** state["step"]
                     bias_correction2 = 1.0 - beta2 ** state["step"]
-                    step_size = step_size * math.sqrt(bias_correction2) / bias_correction1
+                    step_size = step_size / bias_correction1
+                else:
+                    bias_correction2 = 1.0
 
-                p.data.addcdiv_(exp_avg, denom, value=-step_size)
-
+                denom = (exp_avg_sq.sqrt() / math.sqrt(bias_correction2)).add_(group["eps"])
                 # Just adding the square of the weights to the loss function is *not*
                 # the correct way of using L2 regularization/weight decay with Adam,
                 # since that will interact with the m and v parameters in strange ways.
@@ -368,6 +368,9 @@ class AdamW(Optimizer):
                 # Add weight decay at the end (fixed version)
                 if group["weight_decay"] > 0.0:
                     p.data.add_(p.data, alpha=(-group["lr"] * group["weight_decay"]))
+
+                p.data.addcdiv_(exp_avg, denom, value=-step_size)
+
 
         return loss
 
