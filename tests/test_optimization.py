@@ -82,6 +82,46 @@ class OptimizationTest(unittest.TestCase):
             w.grad.zero_()
         self.assertListAlmostEqual(w.tolist(), [0.4, 0.2, -0.5], tol=1e-2)
 
+    def util_adamw_comparison(self, weight_decay):
+        import torch
+        import numpy as np
+        model_size =1024
+        lr = 0.1
+        betas=(0.9, 0.999)
+        eps = 1e-01
+        rng_state = torch.get_rng_state()
+        device = "cpu"
+        torch.manual_seed(56)
+        param_torch = torch.nn.Parameter(torch.randn(model_size, device=device))
+        torch.set_rng_state(rng_state)
+        torch.manual_seed(56)
+        param_transf = torch.nn.Parameter(torch.randn(model_size, device=device))
+        optimizer_torch = torch.optim.AdamW([param_torch], lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
+        optimizer_transf = AdamW(params=[param_transf], lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, correct_bias=True)
+
+
+        for i in range(100):
+            rng_state = torch.get_rng_state()
+            param_torch.grad = torch.randn(model_size, device=device)
+            torch.set_rng_state(rng_state)
+            param_transf.grad = torch.randn(model_size, device=device)
+
+            optimizer_torch.step()
+            optimizer_transf.step()
+
+        atol=1e-3
+
+        val_torch = param_torch.detach().numpy()
+        val_transf = param_transf.detach().numpy()
+        np.testing.assert_allclose(val_transf, val_torch, err_msg="Mismatch between AdamW implementations!", rtol=0, atol=atol)
+
+
+    def test_compare_adamw_no_weight_decay(self):
+        self.util_adamw_comparison(weight_decay=0)
+
+    def test_compare_adamw_with_weight_decay(self):
+        self.util_adamw_comparison(weight_decay=0.5)
+
     def test_adafactor(self):
         w = torch.tensor([0.1, -0.2, -0.1], requires_grad=True)
         target = torch.tensor([0.4, 0.2, -0.5])
